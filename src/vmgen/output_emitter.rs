@@ -13,8 +13,8 @@ use crate::vmgen::luau_runtime_template::emit_runtime_support;
 use crate::vmgen::opcode_handler_template::emit_opcode_constants;
 
 const GENERATED_COMMENT: &str = "-- generated with BarredLuau";
-const INTEGRITY_ERROR_LABEL: &str = "barinteg";
-const RUNTIME_FAULT_LABEL: &str = "barfault";
+const INTEGRITY_ERROR_LABEL: &str = "barx1";
+const RUNTIME_FAULT_LABEL: &str = "barx2";
 
 #[derive(Clone, Debug)]
 struct RuntimeStringPool {
@@ -303,6 +303,10 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         "bytesToString",
         "decodePayload",
         "deserializeProgram",
+        "encodedBlob",
+        "runtimeKey",
+        "runtimeCfg",
+        "program",
         "readOperand",
         "writeRegister",
         "captureClosure",
@@ -310,7 +314,10 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         "returnState",
         "shouldReturn",
         "handler",
+        "instruction",
+        "operand",
         "digit",
+        "bytes",
         "bound",
         "state",
         "nextU32",
@@ -377,9 +384,12 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         "instructionCount",
         "instructions",
         "tag",
+        "op",
         "value",
         "nextCursor",
         "frame",
+        "registers",
+        "namedLocals",
         "registerIndex",
         "captured",
         "upvalueMap",
@@ -402,6 +412,11 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         "rhs",
         "decoded",
         "hash",
+        "tableValues",
+        "mask",
+        "encode",
+        "cell",
+        "pc",
         "a",
         "b",
         "c",
