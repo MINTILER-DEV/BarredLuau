@@ -16,6 +16,21 @@ local function add32(a, b)
     return bit32.band(a + b, 0xFFFFFFFF)
 end
 
+local function fail(stage)
+    error("barx1:" .. stage)
+end
+
+local function readPackedU32(bytes, startIndex, stage)
+    local a = bytes[startIndex]
+    local b = bytes[startIndex + 1]
+    local c = bytes[startIndex + 2]
+    local d = bytes[startIndex + 3]
+    if a == nil or b == nil or c == nil or d == nil then
+        fail(stage)
+    end
+    return a + b * 256 + c * 65536 + d * 16777216
+end
+
 local function fnv32(bytes)
     local hash = 2166136261
     for index = 1, #bytes do
@@ -120,20 +135,20 @@ local function decodeText(text, alphabet)
         if ch ~= ":" then
             local digit = reverse[ch]
             if digit == nil then
-                error("barredluau integrity check failed")
+                fail("d1")
             end
             digits[#digits + 1] = digit
         end
     end
     if #digits % 2 ~= 0 then
-        error("barredluau integrity check failed")
+        fail("d2")
     end
     local radix = #alphabet
     local bytes = {}
     for index = 1, #digits, 2 do
         local value = digits[index] * radix + digits[index + 1]
         if value > 255 then
-            error("barredluau integrity check failed")
+            fail("d3")
         end
         bytes[#bytes + 1] = value
     end
@@ -179,20 +194,23 @@ local function decodePayload(encodedBlob, runtimeKey, runtimeCfg)
         payload = deinterleave(payload)
     end
 
-    local size = payload[1] + payload[2] * 256 + payload[3] * 65536 + payload[4] * 16777216
+    local size = readPackedU32(payload, 1, "f1")
     local start = 5
     local checksum = nil
     if runtimeCfg.includeChecksum then
-        checksum = payload[5] + payload[6] * 256 + payload[7] * 65536 + payload[8] * 16777216
+        checksum = readPackedU32(payload, 5, "f2")
         start = 9
     end
 
+    if #payload ~= start + size - 1 then
+        fail("f3")
+    end
     local data = {}
     for index = 0, size - 1 do
         data[index + 1] = payload[start + index]
     end
     if runtimeCfg.includeChecksum and checksum ~= fnv32(data) then
-        error("barredluau integrity check failed")
+        fail("c1")
     end
     return data
 end
@@ -203,18 +221,27 @@ local function deserializeProgram(bytes)
 
     local function readByte()
         local value = string.byte(blob, cursor, cursor)
+        if value == nil then
+            fail("b1")
+        end
         cursor += 1
         return value
     end
 
     local function readU16()
         local a, b = string.byte(blob, cursor, cursor + 1)
+        if a == nil or b == nil then
+            fail("b2")
+        end
         cursor += 2
         return a + b * 256
     end
 
     local function readU32()
         local a, b, c, d = string.byte(blob, cursor, cursor + 3)
+        if a == nil or b == nil or c == nil or d == nil then
+            fail("b3")
+        end
         cursor += 4
         return a + b * 256 + c * 65536 + d * 16777216
     end
@@ -234,6 +261,9 @@ local function deserializeProgram(bytes)
 
     local function readString()
         local size = readVarU32()
+        if cursor + size - 1 > #blob then
+            fail("b4")
+        end
         local value = string.sub(blob, cursor, cursor + size - 1)
         cursor += size
         return value
@@ -246,16 +276,22 @@ local function deserializeProgram(bytes)
         elseif tag == 1 or tag == 2 or tag == 4 or tag == 5 then
             return { tag = tag, value = readVarU32() }
         elseif tag == 3 then
+            if cursor + 3 > #blob then
+                fail("b5")
+            end
             local value, nextCursor = string.unpack("<i4", blob, cursor)
             cursor = nextCursor
             return { tag = tag, value = value }
         elseif tag == 6 then
             return { tag = tag, value = readByte() }
         end
-        error("barredluau integrity check failed")
+        fail("o1")
     end
 
     local magic = string.sub(blob, cursor, cursor + 3)
+    if #magic ~= 4 then
+        fail("h1")
+    end
     cursor += 4
     local version = readU16()
     local featureFlags = readU32()
@@ -296,13 +332,16 @@ local function deserializeProgram(bytes)
             elseif tag == 1 then
                 constants[index] = readByte() == 1
             elseif tag == 2 then
+                if cursor + 7 > #blob then
+                    fail("b6")
+                end
                 local value, nextCursor = string.unpack("<d", blob, cursor)
                 cursor = nextCursor
                 constants[index] = value
             elseif tag == 3 then
                 constants[index] = readString()
             else
-                error("barredluau integrity check failed")
+                fail("k1")
             end
         end
         local instructionCount = readVarU32()
