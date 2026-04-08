@@ -66,7 +66,7 @@ impl Default for ObfuscationConfig {
             mangle_runtime_identifiers: true,
             pool_runtime_strings: true,
             randomize_opcodes: false,
-            handler_indirection: false,
+            handler_indirection: true,
             constant_pool_shuffle: false,
             emit_decoy_metadata: false,
             selective_virtualization: false,
@@ -114,17 +114,23 @@ impl CompileConfig {
         if self.obfuscation.pool_runtime_strings {
             flags |= 1 << 3;
         }
-        if self.obfuscation.constant_pool_shuffle {
+        if self.obfuscation.handler_indirection {
             flags |= 1 << 4;
         }
-        if self.obfuscation.emit_decoy_metadata {
+        if self.obfuscation.constant_pool_shuffle {
             flags |= 1 << 5;
         }
-        if self.encoder.interleave {
+        if self.obfuscation.emit_decoy_metadata {
             flags |= 1 << 6;
         }
-        if self.encoder.include_checksum {
+        if self.encoder.interleave {
             flags |= 1 << 7;
+        }
+        if self.encoder.include_checksum {
+            flags |= 1 << 8;
+        }
+        if self.obfuscation.selective_virtualization {
+            flags |= 1 << 9;
         }
         flags
     }

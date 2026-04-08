@@ -4,11 +4,78 @@ use crate::config::{BuildMode, CompileConfig};
 use crate::ir::{OpcodeRegistry, ProgramBlob};
 use crate::obfuscation::anti_tamper::RuntimeIntegrity;
 use crate::obfuscation::identifier_mangler::IdentifierMangler;
-use crate::obfuscation::literal_encoder::{emit_luau_encoded_string_expr, emit_luau_xor_decoder};
+use crate::obfuscation::literal_encoder::{
+    emit_luau_encoded_string_expr, emit_luau_xor_decoder, xor_string_literal,
+};
 use crate::serializer::EncoderKey;
 use crate::vmgen::dispatcher_template::emit_dispatcher;
 use crate::vmgen::luau_runtime_template::emit_runtime_support;
 use crate::vmgen::opcode_handler_template::emit_opcode_constants;
+
+#[derive(Clone, Debug)]
+struct RuntimeStringPool {
+    decoder_name: String,
+    getter_name: String,
+    table_name: String,
+    key_seed: u8,
+    entries: Vec<(u8, Vec<u8>)>,
+    reverse: std::collections::BTreeMap<String, usize>,
+}
+
+impl RuntimeStringPool {
+    fn new(decoder_name: String, getter_name: String, table_name: String, key_seed: u8) -> Self {
+        Self {
+            decoder_name,
+            getter_name,
+            table_name,
+            key_seed,
+            entries: Vec::new(),
+            reverse: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn expr(&mut self, value: &str) -> String {
+        if let Some(index) = self.reverse.get(value) {
+            return format!("{}({})", self.getter_name, index + 1);
+        }
+
+        let key = self
+            .key_seed
+            .wrapping_add((self.entries.len() as u8).wrapping_mul(29))
+            .wrapping_add(value.len() as u8);
+        let encoded = xor_string_literal(value, key);
+        let index = self.entries.len();
+        self.entries.push((key, encoded));
+        self.reverse.insert(value.to_string(), index);
+        format!("{}({})", self.getter_name, index + 1)
+    }
+
+    fn emit_prelude(&self) -> String {
+        let mut out = String::new();
+        let _ = write!(out, "local {}={{", self.table_name);
+        for (entry_index, (key, bytes)) in self.entries.iter().enumerate() {
+            if entry_index > 0 {
+                out.push(',');
+            }
+            out.push('{');
+            let _ = write!(out, "{key},{{");
+            for (byte_index, byte) in bytes.iter().enumerate() {
+                if byte_index > 0 {
+                    out.push(',');
+                }
+                let _ = write!(out, "{byte}");
+            }
+            out.push_str("}}");
+        }
+        out.push_str("}\n");
+        let _ = writeln!(
+            out,
+            "local {}=function(i)local e={}[i]return {}(e[2],e[1])end",
+            self.getter_name, self.table_name, self.decoder_name
+        );
+        out
+    }
+}
 
 pub fn emit_luau_output(
     program: &ProgramBlob,
@@ -19,6 +86,8 @@ pub fn emit_luau_output(
     integrity: &RuntimeIntegrity,
 ) -> String {
     let readable = matches!(config.mode, BuildMode::Debug);
+    let use_string_pool = !readable && config.obfuscation.pool_runtime_strings;
+    let use_handler_indirection = !readable && config.obfuscation.handler_indirection;
     let mut mangler = IdentifierMangler::new(config.seed);
     let string_decoder_name = if readable {
         "decodeRuntimeString".to_string()
@@ -51,59 +120,74 @@ pub fn emit_luau_output(
         mangler.next_ident()
     };
     let runtime_string_key = config.seed.wrapping_mul(31).wrapping_add(17) as u8;
-    let alphabet_expr = if readable {
-        format!("\"{}\"", config.encoder.alphabet)
-    } else {
-        emit_luau_encoded_string_expr(
-            &config.encoder.alphabet,
+    let mut runtime_pool = if use_string_pool {
+        Some(RuntimeStringPool::new(
+            string_decoder_name.clone(),
+            mangler.next_ident(),
+            mangler.next_ident(),
             runtime_string_key,
-            &string_decoder_name,
-        )
-    };
-    let magic_expr = if readable {
-        "\"BRLU\"".to_string()
+        ))
     } else {
-        emit_luau_encoded_string_expr("BRLU", runtime_string_key, &string_decoder_name)
+        None
     };
-    let integrity_error_expr = if readable {
-        "\"barredluau integrity check failed\"".to_string()
-    } else {
-        emit_luau_encoded_string_expr(
-            "barredluau integrity check failed",
-            runtime_string_key,
-            &string_decoder_name,
-        )
-    };
-    let runtime_fault_expr = if readable {
-        "\"barredluau runtime fault\"".to_string()
-    } else {
-        emit_luau_encoded_string_expr(
-            "barredluau runtime fault",
-            runtime_string_key,
-            &string_decoder_name,
-        )
-    };
-    let colon_expr = if readable {
-        "\":\"".to_string()
-    } else {
-        emit_luau_encoded_string_expr(":", runtime_string_key, &string_decoder_name)
-    };
-    let unpack_i4_expr = if readable {
-        "\"<i4\"".to_string()
-    } else {
-        emit_luau_encoded_string_expr("<i4", runtime_string_key, &string_decoder_name)
-    };
-    let unpack_d_expr = if readable {
-        "\"<d\"".to_string()
-    } else {
-        emit_luau_encoded_string_expr("<d", runtime_string_key, &string_decoder_name)
-    };
+    let alphabet_expr = runtime_string_expr(
+        readable,
+        &mut runtime_pool,
+        &config.encoder.alphabet,
+        runtime_string_key,
+        &string_decoder_name,
+    );
+    let magic_expr = runtime_string_expr(
+        readable,
+        &mut runtime_pool,
+        "BRLU",
+        runtime_string_key,
+        &string_decoder_name,
+    );
+    let integrity_error_expr = runtime_string_expr(
+        readable,
+        &mut runtime_pool,
+        "barredluau integrity check failed",
+        runtime_string_key,
+        &string_decoder_name,
+    );
+    let runtime_fault_expr = runtime_string_expr(
+        readable,
+        &mut runtime_pool,
+        "barredluau runtime fault",
+        runtime_string_key,
+        &string_decoder_name,
+    );
+    let colon_expr = runtime_string_expr(
+        readable,
+        &mut runtime_pool,
+        ":",
+        runtime_string_key,
+        &string_decoder_name,
+    );
+    let unpack_i4_expr = runtime_string_expr(
+        readable,
+        &mut runtime_pool,
+        "<i4",
+        runtime_string_key,
+        &string_decoder_name,
+    );
+    let unpack_d_expr = runtime_string_expr(
+        readable,
+        &mut runtime_pool,
+        "<d",
+        runtime_string_key,
+        &string_decoder_name,
+    );
 
     let mut out = String::new();
     if readable {
         let _ = writeln!(out, "-- generated by BarredLuau");
     } else {
         out.push_str(&emit_luau_xor_decoder(&string_decoder_name));
+        if let Some(pool) = runtime_pool.as_ref() {
+            out.push_str(&pool.emit_prelude());
+        }
     }
     let _ = writeln!(out, "local {encoded_name} = \"{encoded_blob}\"");
     let _ = writeln!(
@@ -130,7 +214,7 @@ pub fn emit_luau_output(
     );
     out.push_str(&emit_opcode_constants(registry));
     out.push_str(emit_runtime_support());
-    out.push_str(emit_dispatcher());
+    out.push_str(&emit_dispatcher(use_handler_indirection));
     let _ = writeln!(out, "local function {output_name}()");
     let _ = writeln!(
         out,
@@ -182,6 +266,7 @@ pub fn emit_luau_output(
 fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler) -> String {
     let identifiers = [
         "OPCODES",
+        "DISPATCH",
         "LoadNil",
         "LoadBool",
         "LoadNumber",
@@ -229,6 +314,11 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         "writeRegister",
         "captureClosure",
         "executeProto",
+        "returnState",
+        "shouldReturn",
+        "handler",
+        "digit",
+        "bound",
         "state",
         "nextU32",
         "nextByte",
@@ -310,6 +400,7 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         "callee",
         "argsBuffer",
         "count",
+        "values",
         "resultIndex",
         "child",
         "tbl",
@@ -330,6 +421,22 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         map.insert(identifier, mangler.next_ident());
     }
     replace_identifiers(source, &map)
+}
+
+fn runtime_string_expr(
+    readable: bool,
+    pool: &mut Option<RuntimeStringPool>,
+    value: &str,
+    key: u8,
+    decoder_name: &str,
+) -> String {
+    if readable {
+        format!("\"{value}\"")
+    } else if let Some(pool) = pool.as_mut() {
+        pool.expr(value)
+    } else {
+        emit_luau_encoded_string_expr(value, key, decoder_name)
+    }
 }
 
 fn replace_identifiers(

@@ -42,4 +42,7 @@ fn release_pipeline_minifies_and_hides_bootstrap_strings() {
     assert!(!artifacts.emitted_luau.contains("barredluau runtime fault"));
     assert!(!artifacts.emitted_luau.contains("\"BRLU\""));
     assert!(!artifacts.emitted_luau.contains("LoadNil"));
+    assert!(!artifacts.emitted_luau.contains("if op=="));
+    assert!(!artifacts.emitted_luau.contains("elseif op=="));
+    assert!(!artifacts.emitted_luau.contains("decodeRuntimeString("));
 }
