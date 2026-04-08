@@ -23,3 +23,23 @@ fn pipeline_emits_runtime_scaffold() {
     assert!(!artifacts.encoded_blob.is_empty());
     assert!(!artifacts.serialized_blob.is_empty());
 }
+
+#[test]
+fn release_pipeline_minifies_and_hides_bootstrap_strings() {
+    let mut config = CompileConfig::default();
+    config.mode = BuildMode::Release;
+    config.anti_tamper.enabled = true;
+    let artifacts = compile_with_artifacts(sample_programs::conditionals_and_loop(), &config)
+        .expect("release pipeline should succeed");
+
+    assert!(!artifacts.emitted_luau.contains("decodePayload"));
+    assert!(!artifacts.emitted_luau.contains("bootstrap"));
+    assert!(
+        !artifacts
+            .emitted_luau
+            .contains("barredluau integrity check failed")
+    );
+    assert!(!artifacts.emitted_luau.contains("barredluau runtime fault"));
+    assert!(!artifacts.emitted_luau.contains("\"BRLU\""));
+    assert!(!artifacts.emitted_luau.contains("LoadNil"));
+}
