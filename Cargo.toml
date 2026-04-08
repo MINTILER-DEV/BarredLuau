@@ -1,0 +1,11 @@
+[package]
+name = "barred_luau"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.39", features = ["derive"] }
+
+[lib]
+name = "barred_luau"
+path = "src/lib.rs"

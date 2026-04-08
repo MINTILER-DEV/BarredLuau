@@ -1,0 +1,84 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version number without a leading v
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: barred_luau-linux-x86_64
+            binary_name: barred_luau
+          - os: windows-latest
+            artifact_name: barred_luau-windows-x86_64
+            binary_name: barred_luau.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir dist
+          cp target/release/${{ matrix.binary_name }} dist/
+          cp README.md RELEASE_NOTES.md dist/
+          tar -czf ${{ matrix.artifact_name }}.tar.gz -C dist .
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "target/release/${{ matrix.binary_name }}" dist/
+          Copy-Item README.md dist/
+          Copy-Item RELEASE_NOTES.md dist/
+          Compress-Archive -Path dist/* -DestinationPath "${{ matrix.artifact_name }}.zip"
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            *.tar.gz
+            *.zip
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Flatten artifacts
+        run: find release-artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} . \;
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            ./*.zip ./*.tar.gz \
+            --title "BarredLuau v${VERSION}" \
+            --notes-file RELEASE_NOTES.md \
+            --generate-notes
