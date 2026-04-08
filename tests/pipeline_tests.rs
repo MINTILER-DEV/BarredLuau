@@ -20,7 +20,7 @@ fn pipeline_emits_runtime_scaffold() {
     assert!(artifacts.emitted_luau.contains("decodePayload"));
     assert!(artifacts.emitted_luau.contains("deserializeProgram"));
     assert!(artifacts.emitted_luau.contains("executeProto"));
-    assert!(artifacts.emitted_luau.contains("x1"));
+    assert!(artifacts.emitted_luau.contains("barx1"));
     assert!(!artifacts.encoded_blob.is_empty());
     assert!(!artifacts.serialized_blob.is_empty());
 }
@@ -40,8 +40,8 @@ fn release_pipeline_minifies_and_hides_bootstrap_strings() {
     );
     assert!(!artifacts.emitted_luau.contains("decodePayload"));
     assert!(!artifacts.emitted_luau.contains("bootstrap"));
-    assert!(artifacts.emitted_luau.contains("x1"));
-    assert!(artifacts.emitted_luau.contains("x2"));
+    assert!(artifacts.emitted_luau.contains("barx1"));
+    assert!(artifacts.emitted_luau.contains("barx2"));
     assert!(!artifacts.emitted_luau.contains("\"BRLU\""));
     assert!(!artifacts.emitted_luau.contains("LoadNil"));
     assert!(!artifacts.emitted_luau.contains("if op=="));
