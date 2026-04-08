@@ -35,11 +35,11 @@ fn release_pipeline_minifies_and_hides_bootstrap_strings() {
     assert!(!artifacts.emitted_luau.contains("decodePayload"));
     assert!(!artifacts.emitted_luau.contains("bootstrap"));
     assert!(
-        !artifacts
+        artifacts
             .emitted_luau
             .contains("barredluau integrity check failed")
     );
-    assert!(!artifacts.emitted_luau.contains("barredluau runtime fault"));
+    assert!(artifacts.emitted_luau.contains("barredluau runtime fault"));
     assert!(!artifacts.emitted_luau.contains("\"BRLU\""));
     assert!(!artifacts.emitted_luau.contains("LoadNil"));
     assert!(!artifacts.emitted_luau.contains("if op=="));

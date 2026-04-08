@@ -144,20 +144,8 @@ pub fn emit_luau_output(
         runtime_string_key,
         &string_decoder_name,
     );
-    let integrity_error_expr = runtime_string_expr(
-        readable,
-        &mut runtime_pool,
-        "barredluau integrity check failed",
-        runtime_string_key,
-        &string_decoder_name,
-    );
-    let runtime_fault_expr = runtime_string_expr(
-        readable,
-        &mut runtime_pool,
-        "barredluau runtime fault",
-        runtime_string_key,
-        &string_decoder_name,
-    );
+    let integrity_error_expr = "\"barredluau integrity check failed\"".to_string();
+    let runtime_fault_expr = "\"barredluau runtime fault\"".to_string();
     let colon_expr = runtime_string_expr(
         readable,
         &mut runtime_pool,
