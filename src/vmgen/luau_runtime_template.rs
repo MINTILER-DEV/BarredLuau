@@ -2,11 +2,25 @@ pub fn emit_runtime_support() -> &'static str {
     r#"
 local bit32 = bit32
 
+local function mul32(a, b)
+    local aLo = bit32.band(a, 0xFFFF)
+    local aHi = bit32.rshift(a, 16)
+    local bLo = bit32.band(b, 0xFFFF)
+    local bHi = bit32.rshift(b, 16)
+    local low = aLo * bLo
+    local cross = aHi * bLo + aLo * bHi
+    return bit32.band(low + bit32.lshift(bit32.band(cross, 0xFFFF), 16), 0xFFFFFFFF)
+end
+
+local function add32(a, b)
+    return bit32.band(a + b, 0xFFFFFFFF)
+end
+
 local function fnv32(bytes)
     local hash = 2166136261
     for index = 1, #bytes do
         hash = bit32.bxor(hash, bytes[index])
-        hash = (hash * 16777619) % 4294967296
+        hash = mul32(hash, 16777619)
     end
     return hash
 end
@@ -15,7 +29,7 @@ local function newPrng(seed)
     return {
         state = seed % 4294967296,
         nextU32 = function(self)
-            self.state = (self.state * 1664525 + 1013904223) % 4294967296
+            self.state = add32(mul32(self.state, 1664525), 1013904223)
             return self.state
         end,
         nextByte = function(self)
