@@ -13,8 +13,8 @@ use crate::vmgen::luau_runtime_template::emit_runtime_support;
 use crate::vmgen::opcode_handler_template::emit_opcode_constants;
 
 const GENERATED_COMMENT: &str = "-- generated with BarredLuau";
-const INTEGRITY_ERROR_LABEL: &str = "barx1";
-const RUNTIME_FAULT_LABEL: &str = "barx2";
+const INTEGRITY_ERROR_LABEL: &str = "x1";
+const RUNTIME_FAULT_LABEL: &str = "x2";
 
 #[derive(Clone, Debug)]
 struct RuntimeStringPool {
