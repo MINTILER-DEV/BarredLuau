@@ -209,6 +209,7 @@ pub fn emit_luau_output(
     out.push_str(emit_runtime_support());
     out.push_str(&emit_dispatcher(use_handler_indirection));
     let _ = writeln!(out, "local function {output_name}()");
+    let _ = writeln!(out, "    local runtimeEnv = (getfenv and getfenv()) or _G");
     let _ = writeln!(
         out,
         "    local decoded = decodePayload({encoded_name}, {key_name}, {cfg_name})"
@@ -234,7 +235,7 @@ pub fn emit_luau_output(
     }
     let _ = writeln!(
         out,
-        "    return executeProto({program_name}.prototypes[{program_name}.entry + 1], {program_name}.prototypes, _G, {{}}, {{}}, {{}})"
+        "    return executeProto({program_name}.prototypes[{program_name}.entry + 1], {program_name}.prototypes, runtimeEnv, {{}}, {{}}, {{}})"
     );
     let _ = writeln!(out, "end");
     let _ = writeln!(out, "return {output_name}()");
@@ -313,6 +314,7 @@ fn obfuscate_bootstrap_identifiers(source: &str, mangler: &mut IdentifierMangler
         "runtimeKey",
         "runtimeCfg",
         "program",
+        "runtimeEnv",
         "readOperand",
         "writeRegister",
         "captureClosure",

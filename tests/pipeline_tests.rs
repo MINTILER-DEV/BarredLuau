@@ -53,6 +53,7 @@ fn release_pipeline_minifies_and_hides_bootstrap_strings() {
     assert!(!artifacts.emitted_luau.contains("tableValues"));
     assert!(!artifacts.emitted_luau.contains("bytes"));
     assert!(!artifacts.emitted_luau.contains("operand"));
+    assert!(artifacts.emitted_luau.contains("getfenv"));
     assert!(artifacts.emitted_luau.contains("string.byte"));
 }
 
@@ -71,6 +72,7 @@ fn pipeline_can_reobfuscate_generated_bootstrap() {
             .emitted_luau
             .contains("-- generated with BarredLuau")
     );
+    assert!(artifacts.emitted_luau.contains("getfenv"));
     assert!(!artifacts.serialized_blob.is_empty());
     assert!(!artifacts.encoded_blob.is_empty());
 }
