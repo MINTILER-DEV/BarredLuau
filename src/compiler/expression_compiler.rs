@@ -129,6 +129,7 @@ pub fn compile_expression(
         }
         Expression::AnonymousFunction(function) => {
             let proto_id = state.compile_nested_function(None, function, ctx.export_bindings())?;
+            state.hydrate_parent_captures(ctx, proto_id);
             let dst = ctx.alloc_temp();
             ctx.emit_closure(dst, proto_id);
             Ok(dst)

@@ -122,6 +122,10 @@ impl FunctionCompileContext {
         VariableResolution::Global
     }
 
+    pub fn has_local_binding(&self, name: &str) -> bool {
+        self.scopes.iter().any(|scope| scope.contains_key(name))
+    }
+
     pub fn export_bindings(&self) -> ParentBindings {
         let mut names = HashSet::new();
         for scope in &self.scopes {

@@ -335,6 +335,16 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_number(&mut self) -> Result<TokenKind, CompileError> {
+        if matches!(self.peek_char(), Some('0')) {
+            let mut clone = self.chars.clone();
+            clone.next();
+            match clone.next() {
+                Some('x') | Some('X') => return self.lex_prefixed_number(16, 2, "hex"),
+                Some('b') | Some('B') => return self.lex_prefixed_number(2, 2, "binary"),
+                _ => {}
+            }
+        }
+
         let mut number = String::new();
         while matches!(self.peek_char(), Some(ch) if ch.is_ascii_digit() || ch == '.') {
             let Some(ch) = self.peek_char() else {
@@ -356,6 +366,43 @@ impl<'a> Lexer<'a> {
             CompileError::Parse(format!("Invalid numeric literal `{number}`: {error}"))
         })?;
         Ok(TokenKind::Number(parsed))
+    }
+
+    fn lex_prefixed_number(
+        &mut self,
+        radix: u32,
+        prefix_len: usize,
+        kind: &str,
+    ) -> Result<TokenKind, CompileError> {
+        let mut literal = String::new();
+        for _ in 0..prefix_len {
+            literal.push(
+                self.next_char()
+                    .ok_or_else(|| CompileError::Parse("Unexpected EOF".to_string()))?,
+            );
+        }
+
+        let mut digits = String::new();
+        while matches!(self.peek_char(), Some(ch) if ch.is_ascii_alphanumeric() || ch == '_') {
+            let ch = self
+                .next_char()
+                .ok_or_else(|| CompileError::Parse("Unexpected EOF".to_string()))?;
+            literal.push(ch);
+            if ch != '_' {
+                digits.push(ch);
+            }
+        }
+
+        if digits.is_empty() {
+            return Err(CompileError::Parse(format!(
+                "Invalid {kind} numeric literal `{literal}`"
+            )));
+        }
+
+        let parsed = u64::from_str_radix(&digits, radix).map_err(|error| {
+            CompileError::Parse(format!("Invalid numeric literal `{literal}`: {error}"))
+        })?;
+        Ok(TokenKind::Number(parsed as f64))
     }
 
     fn lex_string(&mut self) -> Result<TokenKind, CompileError> {

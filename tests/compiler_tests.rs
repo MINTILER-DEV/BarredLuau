@@ -53,3 +53,27 @@ fn compiler_emits_closure_opcode() {
         .any(|instruction| instruction.opcode == Opcode::Closure);
     assert!(contains_closure);
 }
+
+#[test]
+fn compiler_lifts_transitive_upvalues_for_nested_closures() {
+    let backend = MockLuauBackend;
+    let ast = backend
+        .parse(sample_programs::closure_capture())
+        .expect("parse");
+    let ir = compile_program_to_ir(&ast, &CompileConfig::default()).expect("compile");
+
+    let make_adder = ir
+        .prototypes
+        .iter()
+        .find(|proto| proto.name.as_deref() == Some("makeAdder"))
+        .expect("makeAdder proto");
+    let inner = ir
+        .prototypes
+        .iter()
+        .find(|proto| proto.name.is_none() && proto.parameters == vec!["y".to_string()])
+        .expect("inner closure proto");
+
+    assert!(make_adder.upvalues.contains(&"seed".to_string()));
+    assert!(inner.upvalues.contains(&"x".to_string()));
+    assert!(inner.upvalues.contains(&"seed".to_string()));
+}

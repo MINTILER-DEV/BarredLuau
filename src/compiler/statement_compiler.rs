@@ -80,6 +80,7 @@ pub fn compile_statement(
                 function,
                 ctx.export_bindings(),
             )?;
+            state.hydrate_parent_captures(ctx, proto_id);
             ctx.emit_closure(destination, proto_id);
             if !*is_local {
                 let constant = ctx.intern_constant(ConstantValue::String(name.clone()));

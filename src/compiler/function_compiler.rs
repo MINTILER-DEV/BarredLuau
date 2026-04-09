@@ -55,6 +55,25 @@ impl CompilerState {
         self.prototypes.push(proto);
         Ok(id)
     }
+
+    pub fn hydrate_parent_captures(
+        &mut self,
+        parent_ctx: &mut FunctionCompileContext,
+        child_proto: PrototypeId,
+    ) {
+        let Some(proto) = self.prototypes.get(child_proto.0 as usize) else {
+            return;
+        };
+
+        for upvalue in proto.upvalues.clone() {
+            if parent_ctx.has_local_binding(&upvalue) {
+                continue;
+            }
+            if parent_ctx.parent_bindings.contains(&upvalue) {
+                let _ = parent_ctx.resolve_variable(&upvalue);
+            }
+        }
+    }
 }
 
 pub fn compile_program_to_ir(
