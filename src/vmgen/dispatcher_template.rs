@@ -8,6 +8,8 @@ pub fn emit_dispatcher(use_handler_indirection: bool) -> String {
 
 fn emit_linear_dispatcher() -> &'static str {
     r#"
+local executeProto
+
 local function readOperand(frame, operand)
     local tag = operand.tag
     if tag == 0 then
@@ -50,7 +52,7 @@ local function captureClosure(frame, proto, prototypes)
     end
 end
 
-function executeProto(proto, prototypes, env, upvalues, upvalueMap, args)
+executeProto = function(proto, prototypes, env, upvalues, upvalueMap, args)
     local frame = {
         proto = proto,
         env = env,
@@ -198,6 +200,8 @@ end
 
 fn emit_indirect_dispatcher() -> &'static str {
     r#"
+local executeProto
+
 local function readOperand(frame, operand)
     local tag = operand.tag
     if tag == 0 then
@@ -422,7 +426,7 @@ DISPATCH[OPCODES.Not] = function(frame, instruction, prototypes)
     writeRegister(frame, instruction.a.value, not readOperand(frame, instruction.b))
 end
 
-function executeProto(proto, prototypes, env, upvalues, upvalueMap, args)
+executeProto = function(proto, prototypes, env, upvalues, upvalueMap, args)
     local frame = {
         proto = proto,
         env = env,

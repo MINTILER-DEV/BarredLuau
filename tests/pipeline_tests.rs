@@ -21,6 +21,8 @@ fn pipeline_emits_runtime_scaffold() {
     assert!(artifacts.emitted_luau.contains("decodePayload"));
     assert!(artifacts.emitted_luau.contains("deserializeProgram"));
     assert!(artifacts.emitted_luau.contains("executeProto"));
+    assert!(artifacts.emitted_luau.contains("local executeProto"));
+    assert!(!artifacts.emitted_luau.contains("function executeProto("));
     assert!(artifacts.emitted_luau.contains("barx1"));
     assert!(!artifacts.encoded_blob.is_empty());
     assert!(!artifacts.serialized_blob.is_empty());
