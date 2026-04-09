@@ -79,6 +79,8 @@ impl BlobWriter {
             for parameter in &prototype.parameters {
                 writer.write_string(parameter);
             }
+            writer.write_u8(prototype.is_vararg as u8);
+            writer.write_u16(prototype.vararg_register.unwrap_or(u16::MAX));
             writer.write_u16(prototype.max_registers);
             writer.write_u8(prototype.return_arity);
             writer.write_var_u32(prototype.upvalues.len() as u32);

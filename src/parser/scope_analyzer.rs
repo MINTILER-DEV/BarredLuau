@@ -227,7 +227,8 @@ impl ScopeAnalyzer {
             Expression::Nil
             | Expression::Boolean(_)
             | Expression::Number(_)
-            | Expression::String(_) => {}
+            | Expression::String(_)
+            | Expression::VarArg => {}
             Expression::Identifier(name) => self.record_reference(name),
             Expression::Binary { left, right, .. } => {
                 self.visit_expression(left)?;

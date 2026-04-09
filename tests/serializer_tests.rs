@@ -13,6 +13,8 @@ fn serializer_roundtrips_program_blob() {
         prototypes: vec![FunctionProto {
             name: Some("main".to_string()),
             parameters: vec!["arg".to_string()],
+            is_vararg: false,
+            vararg_register: None,
             max_registers: 2,
             upvalues: vec!["captured".to_string()],
             constants: ConstantPool {

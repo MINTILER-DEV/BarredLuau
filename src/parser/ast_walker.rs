@@ -118,7 +118,8 @@ pub fn walk_expression<V: AstVisitor + ?Sized>(visitor: &mut V, expression: &Exp
         | Expression::Boolean(_)
         | Expression::Number(_)
         | Expression::String(_)
-        | Expression::Identifier(_) => {}
+        | Expression::Identifier(_)
+        | Expression::VarArg => {}
         Expression::Binary { left, right, .. } => {
             visitor.visit_expression(left);
             visitor.visit_expression(right);

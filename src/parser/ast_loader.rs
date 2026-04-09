@@ -78,6 +78,7 @@ pub enum Assignable {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionExpression {
     pub params: Vec<String>,
+    pub is_vararg: bool,
     pub body: Block,
 }
 
@@ -94,6 +95,7 @@ pub enum Expression {
     Number(f64),
     String(String),
     Identifier(String),
+    VarArg,
     Binary {
         left: Box<Expression>,
         operator: BinaryOperator,
@@ -446,6 +448,22 @@ impl<'a> Lexer<'a> {
             .ok_or_else(|| CompileError::Parse("Unexpected EOF".to_string()))?;
         let next = self.peek_char();
         let symbol = match (current, next) {
+            ('.', Some('.')) => {
+                let mut clone = self.chars.clone();
+                clone.next();
+                if matches!(clone.next(), Some('.')) {
+                    self.next_char();
+                    self.next_char();
+                    "..."
+                } else if matches!(clone.next(), Some('=')) {
+                    self.next_char();
+                    self.next_char();
+                    "..="
+                } else {
+                    self.next_char();
+                    ".."
+                }
+            }
             ('=', Some('=')) => {
                 self.next_char();
                 "=="
@@ -454,6 +472,30 @@ impl<'a> Lexer<'a> {
                 self.next_char();
                 "~="
             }
+            ('+', Some('=')) => {
+                self.next_char();
+                "+="
+            }
+            ('-', Some('=')) => {
+                self.next_char();
+                "-="
+            }
+            ('*', Some('=')) => {
+                self.next_char();
+                "*="
+            }
+            ('/', Some('=')) => {
+                self.next_char();
+                "/="
+            }
+            ('%', Some('=')) => {
+                self.next_char();
+                "%="
+            }
+            ('^', Some('=')) => {
+                self.next_char();
+                "^="
+            }
             ('<', Some('=')) => {
                 self.next_char();
                 "<="
@@ -461,10 +503,6 @@ impl<'a> Lexer<'a> {
             ('>', Some('=')) => {
                 self.next_char();
                 ">="
-            }
-            ('.', Some('.')) => {
-                self.next_char();
-                ".."
             }
             ('(', _) => "(",
             (')', _) => ")",
@@ -596,8 +634,14 @@ impl Parser {
     fn parse_function_body(&mut self) -> Result<FunctionExpression, CompileError> {
         self.expect_symbol("(")?;
         let mut params = Vec::new();
+        let mut is_vararg = false;
         if !self.consume_symbol(")") {
             loop {
+                if self.consume_symbol("...") {
+                    is_vararg = true;
+                    self.expect_symbol(")")?;
+                    break;
+                }
                 params.push(self.expect_identifier()?);
                 if self.consume_symbol(")") {
                     break;
@@ -608,7 +652,11 @@ impl Parser {
 
         let body = self.parse_block(&[Keyword::End])?;
         self.expect_keyword(Keyword::End)?;
-        Ok(FunctionExpression { params, body })
+        Ok(FunctionExpression {
+            params,
+            is_vararg,
+            body,
+        })
     }
 
     fn parse_if_statement(&mut self) -> Result<Statement, CompileError> {
@@ -704,6 +752,19 @@ impl Parser {
             self.expect_symbol("=")?;
             let values = self.parse_expression_list()?;
             return Ok(Statement::Assignment { targets, values });
+        }
+        if let Some(operator) = self.consume_compound_assignment_operator() {
+            let target = self.into_assignable(expression.clone())?;
+            let right = self.parse_expression(0)?;
+            let left = self.assignable_to_expression(&target);
+            return Ok(Statement::Assignment {
+                targets: vec![target],
+                values: vec![Expression::Binary {
+                    left: Box::new(left),
+                    operator,
+                    right: Box::new(right),
+                }],
+            });
         }
 
         match expression {
@@ -865,6 +926,10 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Identifier(value))
             }
+            TokenKind::Symbol("...") => {
+                self.advance();
+                Ok(Expression::VarArg)
+            }
             TokenKind::Symbol("(") => {
                 self.advance();
                 let expression = self.parse_expression(0)?;
@@ -965,6 +1030,35 @@ impl Parser {
                 "Only identifiers and indexing expressions are assignable".to_string(),
             )),
         }
+    }
+
+    fn assignable_to_expression(&self, assignable: &Assignable) -> Expression {
+        match assignable {
+            Assignable::Identifier(name) => Expression::Identifier(name.clone()),
+            Assignable::Index { table, index } => Expression::Index {
+                table: table.clone(),
+                index: index.clone(),
+            },
+            Assignable::Member { table, member } => Expression::Member {
+                table: table.clone(),
+                member: member.clone(),
+            },
+        }
+    }
+
+    fn consume_compound_assignment_operator(&mut self) -> Option<BinaryOperator> {
+        let operator = match self.current().kind {
+            TokenKind::Symbol("+=") => BinaryOperator::Add,
+            TokenKind::Symbol("-=") => BinaryOperator::Sub,
+            TokenKind::Symbol("*=") => BinaryOperator::Mul,
+            TokenKind::Symbol("/=") => BinaryOperator::Div,
+            TokenKind::Symbol("%=") => BinaryOperator::Mod,
+            TokenKind::Symbol("^=") => BinaryOperator::Pow,
+            TokenKind::Symbol("..=") => BinaryOperator::Concat,
+            _ => return None,
+        };
+        self.advance();
+        Some(operator)
     }
 
     fn peek_symbol(&self, symbol: &str) -> bool {

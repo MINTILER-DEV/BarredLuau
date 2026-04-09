@@ -117,6 +117,20 @@ function executeProto(proto, prototypes, env, upvalues, upvalueMap, args)
                 argsBuffer[argIndex] = frame.registers[base + argIndex + 1].value
             end
             writeRegister(frame, instruction.c.value, callee(table.unpack(argsBuffer)))
+        elseif op == OPCODES.CallSpread then
+            local base = instruction.a.value
+            local callee = frame.registers[base + 1].value
+            local fixedCount = instruction.b.value
+            local argsBuffer = {}
+            for argIndex = 1, fixedCount do
+                argsBuffer[argIndex] = frame.registers[base + argIndex + 1].value
+            end
+            local spread = frame.registers[base + fixedCount + 2].value or {}
+            local offset = #argsBuffer
+            for spreadIndex = 1, #spread do
+                argsBuffer[offset + spreadIndex] = spread[spreadIndex]
+            end
+            writeRegister(frame, instruction.c.value, callee(table.unpack(argsBuffer)))
         elseif op == OPCODES.Return then
             local count = instruction.b.value
             if count == 0 then
@@ -130,6 +144,9 @@ function executeProto(proto, prototypes, env, upvalues, upvalueMap, args)
                 end
                 return table.unpack(results)
             end
+        elseif op == OPCODES.ReturnSpread then
+            local spread = frame.registers[instruction.a.value + 1].value or {}
+            return table.unpack(spread)
         elseif op == OPCODES.Jump then
             frame.pc += instruction.b.value
         elseif op == OPCODES.JumpIf then
@@ -281,6 +298,22 @@ DISPATCH[OPCODES.Call] = function(frame, instruction, prototypes)
     writeRegister(frame, instruction.c.value, callee(table.unpack(argsBuffer)))
 end
 
+DISPATCH[OPCODES.CallSpread] = function(frame, instruction, prototypes)
+    local base = instruction.a.value
+    local callee = frame.registers[base + 1].value
+    local fixedCount = instruction.b.value
+    local argsBuffer = {}
+    for argIndex = 1, fixedCount do
+        argsBuffer[argIndex] = frame.registers[base + argIndex + 1].value
+    end
+    local spread = frame.registers[base + fixedCount + 2].value or {}
+    local offset = #argsBuffer
+    for spreadIndex = 1, #spread do
+        argsBuffer[offset + spreadIndex] = spread[spreadIndex]
+    end
+    writeRegister(frame, instruction.c.value, callee(table.unpack(argsBuffer)))
+end
+
 DISPATCH[OPCODES.Return] = function(frame, instruction, prototypes)
     local count = instruction.b.value
     if count == 0 then
@@ -297,6 +330,14 @@ DISPATCH[OPCODES.Return] = function(frame, instruction, prototypes)
         end
         frame.returnState = { count = count, values = results }
     end
+    return true
+end
+
+DISPATCH[OPCODES.ReturnSpread] = function(frame, instruction, prototypes)
+    frame.returnState = {
+        count = -1,
+        values = frame.registers[instruction.a.value + 1].value or {},
+    }
     return true
 end
 
@@ -402,6 +443,22 @@ function executeProto(proto, prototypes, env, upvalues, upvalueMap, args)
             frame.registers[index].value = value
         end
     end
+    if proto.isVararg and proto.varargRegister ~= nil and frame.registers[proto.varargRegister + 1] then
+        local packed = {}
+        local base = #proto.params
+        for index = base + 1, #(args or {}) do
+            packed[#packed + 1] = args[index]
+        end
+        frame.registers[proto.varargRegister + 1].value = packed
+    end
+    if proto.isVararg and proto.varargRegister ~= nil and frame.registers[proto.varargRegister + 1] then
+        local packed = {}
+        local base = #proto.params
+        for index = base + 1, #(args or {}) do
+            packed[#packed + 1] = args[index]
+        end
+        frame.registers[proto.varargRegister + 1].value = packed
+    end
 
     for index, name in ipairs(proto.localNames) do
         if name ~= false and name ~= nil and frame.registers[index] then
@@ -425,6 +482,8 @@ function executeProto(proto, prototypes, env, upvalues, upvalueMap, args)
             local state = frame.returnState
             if state == nil or state.count == 0 then
                 return nil
+            elseif state.count == -1 then
+                return table.unpack(state.values)
             elseif state.count == 1 then
                 return state.values[1]
             else

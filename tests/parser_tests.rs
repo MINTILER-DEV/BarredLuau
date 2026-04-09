@@ -79,3 +79,41 @@ local other = id:func(1, 2)
             )
     ));
 }
+
+#[test]
+fn parser_accepts_varargs_and_compound_assignment() {
+    let backend = MockLuauBackend;
+    let ast = backend
+        .parse(
+            r#"
+local fn = function(...)
+    local args = {...}
+    local total = 0
+    total += 1
+    return args
+end
+"#,
+        )
+        .expect("parse");
+
+    let Statement::LocalDeclaration { values, .. } = &ast.block.statements[0] else {
+        panic!("expected local declaration");
+    };
+    let Expression::AnonymousFunction(function) = &values[0] else {
+        panic!("expected anonymous function");
+    };
+
+    assert!(function.is_vararg);
+    assert!(matches!(
+        &function.body.statements[0],
+        Statement::LocalDeclaration { values, .. }
+            if matches!(&values[0], Expression::TableConstructor(fields)
+                if fields.len() == 1 && matches!(fields[0].value, Expression::VarArg))
+    ));
+    assert!(matches!(
+        &function.body.statements[2],
+        Statement::Assignment { targets, values }
+            if matches!(&targets[..], [barred_luau::parser::Assignable::Identifier(name)] if name == "total")
+            && matches!(&values[..], [Expression::Binary { operator, .. }] if *operator == barred_luau::parser::BinaryOperator::Add)
+    ));
+}

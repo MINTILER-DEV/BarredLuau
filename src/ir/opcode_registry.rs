@@ -35,10 +35,12 @@ pub enum Opcode {
     Le = 27,
     Len = 28,
     Not = 29,
+    CallSpread = 30,
+    ReturnSpread = 31,
 }
 
 impl Opcode {
-    pub const ALL: [Opcode; 30] = [
+    pub const ALL: [Opcode; 32] = [
         Opcode::LoadNil,
         Opcode::LoadBool,
         Opcode::LoadNumber,
@@ -69,6 +71,8 @@ impl Opcode {
         Opcode::Le,
         Opcode::Len,
         Opcode::Not,
+        Opcode::CallSpread,
+        Opcode::ReturnSpread,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -103,6 +107,8 @@ impl Opcode {
             Opcode::Le => "Le",
             Opcode::Len => "Len",
             Opcode::Not => "Not",
+            Opcode::CallSpread => "CallSpread",
+            Opcode::ReturnSpread => "ReturnSpread",
         }
     }
 }

@@ -20,6 +20,7 @@ impl CompilerState {
             Some("main".to_string()),
             &FunctionExpression {
                 params: Vec::new(),
+                is_vararg: false,
                 body: program.block.clone(),
             },
             ParentBindings::new(),
@@ -48,7 +49,12 @@ impl CompilerState {
         function: &FunctionExpression,
         parent_bindings: ParentBindings,
     ) -> Result<PrototypeId, CompileError> {
-        let mut ctx = FunctionCompileContext::new(name, &function.params, parent_bindings);
+        let mut ctx = FunctionCompileContext::new(
+            name,
+            &function.params,
+            function.is_vararg,
+            parent_bindings,
+        );
         compile_block(&function.body.statements, &mut ctx, self, false)?;
         let proto = ctx.finalize()?;
         let id = PrototypeId(self.prototypes.len() as u32);

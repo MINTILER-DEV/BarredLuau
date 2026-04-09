@@ -63,6 +63,11 @@ impl<'a> BlobReader<'a> {
             for _ in 0..parameter_count {
                 parameters.push(reader.read_string()?);
             }
+            let is_vararg = reader.read_u8()? != 0;
+            let vararg_register = match reader.read_u16()? {
+                u16::MAX => None,
+                value => Some(value),
+            };
             let max_registers = reader.read_u16()?;
             let return_arity = reader.read_u8()?;
             let upvalue_count = reader.read_var_u32()? as usize;
@@ -115,6 +120,8 @@ impl<'a> BlobReader<'a> {
             prototypes.push(FunctionProto {
                 name,
                 parameters,
+                is_vararg,
+                vararg_register,
                 max_registers,
                 upvalues,
                 constants,

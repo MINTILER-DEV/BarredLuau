@@ -306,6 +306,11 @@ local function deserializeProgram(bytes)
         for index = 1, paramCount do
             params[index] = readString()
         end
+        local isVararg = readByte() == 1
+        local varargRegister = readU16()
+        if varargRegister == 65535 then
+            varargRegister = nil
+        end
         local maxRegisters = readU16()
         local returnArity = readByte()
         local upvalueCount = readVarU32()
@@ -357,6 +362,8 @@ local function deserializeProgram(bytes)
         prototypes[protoIndex] = {
             name = name,
             params = params,
+            isVararg = isVararg,
+            varargRegister = varargRegister,
             maxRegisters = maxRegisters,
             returnArity = returnArity,
             upvalues = upvalues,

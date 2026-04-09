@@ -55,11 +55,17 @@ pub struct FunctionCompileContext {
 }
 
 impl FunctionCompileContext {
-    pub fn new(name: Option<String>, params: &[String], parent_bindings: ParentBindings) -> Self {
+    pub fn new(
+        name: Option<String>,
+        params: &[String],
+        is_vararg: bool,
+        parent_bindings: ParentBindings,
+    ) -> Self {
         let mut ctx = Self {
             proto: FunctionProto {
                 name,
                 parameters: params.to_vec(),
+                is_vararg,
                 ..FunctionProto::default()
             },
             allocator: RegisterAllocator::default(),
@@ -72,6 +78,10 @@ impl FunctionCompileContext {
             let register = ctx.declare_local(parameter.clone());
             ctx.proto
                 .set_local_name(register.0, Some(parameter.clone()));
+        }
+        if is_vararg {
+            let register = ctx.allocator.alloc();
+            ctx.proto.vararg_register = Some(register.0);
         }
         ctx
     }

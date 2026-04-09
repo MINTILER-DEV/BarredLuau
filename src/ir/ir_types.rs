@@ -51,6 +51,8 @@ pub struct Instruction {
 pub struct FunctionProto {
     pub name: Option<String>,
     pub parameters: Vec<String>,
+    pub is_vararg: bool,
+    pub vararg_register: Option<u16>,
     pub max_registers: u16,
     pub upvalues: Vec<String>,
     pub constants: ConstantPool,

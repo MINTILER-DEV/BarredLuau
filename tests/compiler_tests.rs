@@ -95,3 +95,44 @@ fn compiler_accepts_method_call_syntax() {
     assert!(opcodes.contains(&Opcode::GetTable));
     assert!(opcodes.contains(&Opcode::Call));
 }
+
+#[test]
+fn compiler_supports_varargs_short_circuit_and_for_loops() {
+    let backend = MockLuauBackend;
+    let ast = backend
+        .parse(
+            r#"
+local function wrap(...)
+    local args = {...}
+    local total = 0
+    local function addPair(a, b)
+        return a + b
+    end
+    for i = 1, #args do
+        total += args[i]
+    end
+    for index, value in ipairs(args) do
+        if index == 1 or value > 100 then
+            total = total and total or 0
+        end
+    end
+    total = addPair(table.unpack(args))
+    return table.unpack(args)
+end
+return wrap(3, 4)
+"#,
+        )
+        .expect("parse");
+    let ir = compile_program_to_ir(&ast, &CompileConfig::default()).expect("compile");
+    let opcodes: Vec<Opcode> = ir
+        .prototypes
+        .iter()
+        .flat_map(|proto| proto.instructions.iter())
+        .map(|instruction| instruction.opcode)
+        .collect();
+
+    assert!(opcodes.contains(&Opcode::JumpIf));
+    assert!(opcodes.contains(&Opcode::JumpIfNot));
+    assert!(opcodes.contains(&Opcode::CallSpread));
+    assert!(opcodes.contains(&Opcode::ReturnSpread));
+}

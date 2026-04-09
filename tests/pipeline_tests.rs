@@ -3,6 +3,7 @@ mod sample_programs;
 
 use barred_luau::compile_with_artifacts;
 use barred_luau::config::{BuildMode, CompileConfig};
+use std::fs;
 
 #[test]
 fn pipeline_emits_runtime_scaffold() {
@@ -53,4 +54,23 @@ fn release_pipeline_minifies_and_hides_bootstrap_strings() {
     assert!(!artifacts.emitted_luau.contains("bytes"));
     assert!(!artifacts.emitted_luau.contains("operand"));
     assert!(artifacts.emitted_luau.contains("string.byte"));
+}
+
+#[test]
+fn pipeline_can_reobfuscate_generated_bootstrap() {
+    let mut config = CompileConfig::default();
+    config.mode = BuildMode::Release;
+    config.anti_tamper.enabled = true;
+    let input = fs::read_to_string("examples/sample_output.protected.luau")
+        .expect("should read generated bootstrap example");
+    let artifacts =
+        compile_with_artifacts(&input, &config).expect("re-obfuscating generated bootstrap");
+
+    assert!(
+        artifacts
+            .emitted_luau
+            .contains("-- generated with BarredLuau")
+    );
+    assert!(!artifacts.serialized_blob.is_empty());
+    assert!(!artifacts.encoded_blob.is_empty());
 }

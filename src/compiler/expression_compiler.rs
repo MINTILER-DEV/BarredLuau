@@ -71,6 +71,17 @@ pub fn compile_expression(
                 Ok(dst)
             }
         },
+        Expression::VarArg => {
+            let register =
+                ctx.proto
+                    .vararg_register
+                    .ok_or_else(|| CompileError::UnsupportedSyntax {
+                        node: "...".to_string(),
+                        detail: "vararg expressions are only available inside vararg functions"
+                            .to_string(),
+                    })?;
+            Ok(RegisterId(register))
+        }
         Expression::Binary {
             left,
             operator,
@@ -106,6 +117,34 @@ pub fn compile_expression(
             Ok(dst)
         }
         Expression::FunctionCall { callee, args } => {
+            if let Some(spread) = args.last().and_then(extract_unpack_argument) {
+                let fixed_count = args.len().saturating_sub(1);
+                let base = ctx.alloc_block(fixed_count as u16 + 2);
+                let callee_reg = compile_expression(callee, ctx, state)?;
+                if base != callee_reg {
+                    ctx.emit_move(base, callee_reg);
+                }
+                for (offset, arg) in args[..fixed_count].iter().enumerate() {
+                    let source = compile_expression(arg, ctx, state)?;
+                    let dst = RegisterId(base.0 + offset as u16 + 1);
+                    if dst != source {
+                        ctx.emit_move(dst, source);
+                    }
+                }
+                let spread_reg = compile_expression(spread, ctx, state)?;
+                let spread_dst = RegisterId(base.0 + fixed_count as u16 + 1);
+                if spread_dst != spread_reg {
+                    ctx.emit_move(spread_dst, spread_reg);
+                }
+                let result = ctx.alloc_temp();
+                ctx.emit(Instruction::new(
+                    Opcode::CallSpread,
+                    Operand::Register(base),
+                    Operand::Immediate(fixed_count as i32),
+                    Operand::Register(result),
+                ));
+                return Ok(result);
+            }
             let base = ctx.alloc_block((args.len() as u16) + 1);
             let callee_reg = compile_expression(callee, ctx, state)?;
             if base != callee_reg {
@@ -142,6 +181,11 @@ fn compile_table_constructor(
     ctx: &mut FunctionCompileContext,
     state: &mut CompilerState,
 ) -> Result<RegisterId, CompileError> {
+    if fields.len() == 1 && fields[0].key.is_none() && matches!(fields[0].value, Expression::VarArg)
+    {
+        return compile_expression(&fields[0].value, ctx, state);
+    }
+
     let dst = ctx.alloc_temp();
     ctx.emit(Instruction::new(
         Opcode::NewTable,
@@ -225,10 +269,23 @@ fn compile_binary_expression(
     state: &mut CompilerState,
 ) -> Result<RegisterId, CompileError> {
     if matches!(operator, BinaryOperator::And | BinaryOperator::Or) {
-        return Err(CompileError::UnsupportedSyntax {
-            node: format!("{operator:?}"),
-            detail: "short-circuit logical lowering is reserved for a future pass".to_string(),
-        });
+        let left_reg = compile_expression(left, ctx, state)?;
+        let dst = ctx.alloc_temp();
+        if dst != left_reg {
+            ctx.emit_move(dst, left_reg);
+        }
+        let end_label = ctx.new_label();
+        match operator {
+            BinaryOperator::And => ctx.emit_jump(Opcode::JumpIfNot, Some(dst), end_label),
+            BinaryOperator::Or => ctx.emit_jump(Opcode::JumpIf, Some(dst), end_label),
+            _ => unreachable!(),
+        }
+        let right_reg = compile_expression(right, ctx, state)?;
+        if dst != right_reg {
+            ctx.emit_move(dst, right_reg);
+        }
+        ctx.mark_label(end_label);
+        return Ok(dst);
     }
 
     let left_reg = compile_expression(left, ctx, state)?;
@@ -269,4 +326,22 @@ fn compile_binary_expression(
         return Ok(inverted);
     }
     Ok(dst)
+}
+
+fn extract_unpack_argument(expression: &Expression) -> Option<&Expression> {
+    let Expression::FunctionCall { callee, args } = expression else {
+        return None;
+    };
+    if args.len() != 1 {
+        return None;
+    }
+    match callee.as_ref() {
+        Expression::Member { table, member }
+            if matches!(table.as_ref(), Expression::Identifier(name) if name == "table")
+                && member == "unpack" =>
+        {
+            Some(&args[0])
+        }
+        _ => None,
+    }
 }
