@@ -38,3 +38,15 @@ else
 end
 "#
 }
+
+pub fn method_calls() -> &'static str {
+    r#"
+local obj = {
+    value = 7,
+    add = function(self, x)
+        return self.value + x
+    end,
+}
+return obj:add(5)
+"#
+}

@@ -798,6 +798,21 @@ impl Parser {
                 };
                 continue;
             }
+            if self.consume_symbol(":") {
+                let receiver = expression;
+                let member = self.expect_identifier()?;
+                let mut args = self.parse_argument_list()?;
+                let callee = Expression::Member {
+                    table: Box::new(receiver.clone()),
+                    member,
+                };
+                args.insert(0, receiver);
+                expression = Expression::FunctionCall {
+                    callee: Box::new(callee),
+                    args,
+                };
+                continue;
+            }
             if self.matches_symbol("(") {
                 let args = self.parse_argument_list()?;
                 expression = Expression::FunctionCall {

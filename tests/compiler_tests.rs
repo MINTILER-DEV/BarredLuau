@@ -77,3 +77,21 @@ fn compiler_lifts_transitive_upvalues_for_nested_closures() {
     assert!(inner.upvalues.contains(&"x".to_string()));
     assert!(inner.upvalues.contains(&"seed".to_string()));
 }
+
+#[test]
+fn compiler_accepts_method_call_syntax() {
+    let backend = MockLuauBackend;
+    let ast = backend
+        .parse(sample_programs::method_calls())
+        .expect("parse");
+    let ir = compile_program_to_ir(&ast, &CompileConfig::default()).expect("compile");
+    let opcodes: Vec<Opcode> = ir
+        .prototypes
+        .iter()
+        .flat_map(|proto| proto.instructions.iter())
+        .map(|instruction| instruction.opcode)
+        .collect();
+
+    assert!(opcodes.contains(&Opcode::GetTable));
+    assert!(opcodes.contains(&Opcode::Call));
+}
