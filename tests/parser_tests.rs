@@ -117,3 +117,33 @@ end
             && matches!(&values[..], [Expression::Binary { operator, .. }] if *operator == barred_luau::parser::BinaryOperator::Add)
     ));
 }
+
+#[test]
+fn parser_supports_template_literals() {
+    let backend = MockLuauBackend;
+    let ast = backend
+        .parse(
+            r#"
+local var = 5
+local str = `{var} apples`
+"#,
+        )
+        .expect("parse");
+
+    let Statement::LocalDeclaration { values, .. } = &ast.block.statements[0] else {
+        panic!("expected first local declaration");
+    };
+    let Statement::LocalDeclaration { values: second_values, .. } = &ast.block.statements[1]
+        else {
+            panic!("expected second local declaration");
+        };
+
+    assert!(matches!(values[0], Expression::Number(value) if value == 5.0));
+    assert!(matches!(
+        &second_values[0],
+        Expression::Binary { left, operator, right }
+            if *operator == barred_luau::parser::BinaryOperator::Concat
+            && matches!(&**left, Expression::Identifier(name) if name == "var")
+            && matches!(&**right, Expression::String(value) if value == " apples")
+    ));
+}

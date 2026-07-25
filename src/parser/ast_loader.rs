@@ -172,6 +172,7 @@ enum TokenKind {
     Identifier(String),
     Number(f64),
     String(String),
+    Template(String),
     Symbol(&'static str),
     Keyword(Keyword),
     Eof,
@@ -214,6 +215,7 @@ impl Token {
             TokenKind::Identifier(value) => value.clone(),
             TokenKind::Number(value) => value.to_string(),
             TokenKind::String(_) => "<string>".to_string(),
+            TokenKind::Template(_) => "<template>".to_string(),
             TokenKind::Symbol(symbol) => symbol.to_string(),
             TokenKind::Keyword(keyword) => format!("{keyword:?}"),
             TokenKind::Eof => "<eof>".to_string(),
@@ -255,7 +257,7 @@ impl<'a> Lexer<'a> {
                 self.lex_identifier_or_keyword()?
             } else if ch.is_ascii_digit() {
                 self.lex_number()?
-            } else if ch == '\'' || ch == '"' {
+            } else if ch == '\'' || ch == '"' || ch == '`' {
                 self.lex_string()?
             } else {
                 self.lex_symbol()?
@@ -411,6 +413,7 @@ impl<'a> Lexer<'a> {
         let delimiter = self
             .next_char()
             .ok_or_else(|| CompileError::Parse("Unexpected EOF".to_string()))?;
+        let is_template = delimiter == '`';
         let mut content = String::new();
         loop {
             let Some(ch) = self.next_char() else {
@@ -432,6 +435,7 @@ impl<'a> Lexer<'a> {
                     '\\' => '\\',
                     '\'' => '\'',
                     '"' => '"',
+                    '`' => '`',
                     other => other,
                 };
                 content.push(mapped);
@@ -439,7 +443,11 @@ impl<'a> Lexer<'a> {
                 content.push(ch);
             }
         }
-        Ok(TokenKind::String(content))
+        if is_template {
+            Ok(TokenKind::Template(content))
+        } else {
+            Ok(TokenKind::String(content))
+        }
     }
 
     fn lex_symbol(&mut self) -> Result<TokenKind, CompileError> {
@@ -921,6 +929,11 @@ impl Parser {
                 self.advance();
                 Ok(Expression::String(value))
             }
+            TokenKind::Template(value) => {
+                let value = value.clone();
+                self.advance();
+                self.parse_template_literal(&value)
+            }
             TokenKind::Identifier(value) => {
                 let value = value.clone();
                 self.advance();
@@ -948,6 +961,82 @@ impl Parser {
                 self.current().column
             ))),
         }
+    }
+
+    fn parse_template_literal(&self, source: &str) -> Result<Expression, CompileError> {
+        let mut parts: Vec<Expression> = Vec::new();
+        let mut literal = String::new();
+        let mut chars = source.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '{' {
+                if let Some(next) = chars.peek() {
+                    if *next == '{' {
+                        chars.next();
+                        literal.push('{');
+                        continue;
+                    }
+                }
+
+                if !literal.is_empty() {
+                    parts.push(Expression::String(literal.clone()));
+                    literal.clear();
+                }
+
+                let mut expr_text = String::new();
+                let mut brace_depth = 1;
+                while let Some(expr_ch) = chars.next() {
+                    if expr_ch == '{' {
+                        brace_depth += 1;
+                    } else if expr_ch == '}' {
+                        brace_depth -= 1;
+                        if brace_depth == 0 {
+                            break;
+                        }
+                    }
+                    expr_text.push(expr_ch);
+                }
+
+                if brace_depth != 0 {
+                    return Err(CompileError::Parse(
+                        "Unterminated template expression".to_string(),
+                    ));
+                }
+
+                let expr = Parser::new(Lexer::new(&expr_text).lex()?).parse_expression(0)?;
+                parts.push(expr);
+            } else if ch == '}' {
+                if let Some(next) = chars.peek() {
+                    if *next == '}' {
+                        chars.next();
+                        literal.push('}');
+                        continue;
+                    }
+                }
+                return Err(CompileError::Parse(
+                    "Unexpected closing brace in template literal".to_string(),
+                ));
+            } else {
+                literal.push(ch);
+            }
+        }
+
+        if !literal.is_empty() {
+            parts.push(Expression::String(literal));
+        }
+
+        let result = parts.into_iter().fold(None, |acc: Option<Expression>, part| {
+            match acc {
+                None => Some(part),
+                Some(left) => Some(Expression::Binary {
+                    left: Box::new(left),
+                    operator: BinaryOperator::Concat,
+                    right: Box::new(part),
+                }),
+            }
+        });
+
+        Ok(result.unwrap_or(Expression::String(String::new())))
     }
 
     fn parse_table_constructor(&mut self) -> Result<Expression, CompileError> {
