@@ -307,16 +307,17 @@ fn compile_binary_expression(
         BinaryOperator::Ne => Opcode::Eq,
         BinaryOperator::And | BinaryOperator::Or => unreachable!(),
     };
+    let (lhs, rhs) = match operator {
+        BinaryOperator::Gt | BinaryOperator::Ge => (right_reg, left_reg),
+        _ => (left_reg, right_reg),
+    };
     ctx.emit(Instruction::binary(
         opcode,
         dst,
-        Operand::Register(left_reg),
-        Operand::Register(right_reg),
+        Operand::Register(lhs),
+        Operand::Register(rhs),
     ));
-    if matches!(
-        operator,
-        BinaryOperator::Gt | BinaryOperator::Ge | BinaryOperator::Ne
-    ) {
+    if matches!(operator, BinaryOperator::Ne) {
         let inverted = ctx.alloc_temp();
         ctx.emit(Instruction::unary(
             Opcode::Not,
